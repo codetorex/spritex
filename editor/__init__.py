@@ -32,6 +32,7 @@ class SpriteEditorApp(App):
 
     def build(self):
         self.canvas = SpriteEditorWidget()
+        self.title = "Sprite Extractor"
         return self.canvas
 
 
