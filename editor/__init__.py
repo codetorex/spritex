@@ -1,11 +1,12 @@
 import io
 import time
+import os
 from pathlib import Path
 from typing import Generic, Callable, List
 
 import numpy as np
 import sys
-from PIL import Image as PILImage
+from PIL import Image as PILImage, ImageChops
 from PIL import ImageDraw
 from kivy.app import App
 from kivy.core.clipboard import Clipboard
@@ -97,6 +98,7 @@ class SpriteEditorWidget(Widget):
         self._create_tool_button('Create Sprite', self.create_sprite_press)
         self._create_tool_button('Find Unique Colors', self.find_unique_press)
         self._create_tool_button('Highlight Unique Colors', self.highlight_unique_press)
+        self._create_tool_button('Extract Transparent Sprite', self.extract_transparent_press)
 
         info_stack = StackLayout(size=(200, 50), size_hint=(None, 0.3))
         info_stack.orientation = "tb-lr"
@@ -134,6 +136,37 @@ class SpriteEditorWidget(Widget):
     def date_for_filename():
         return time.strftime("%Y%m%d%H%M%S", time.localtime())
 
+    def extract_transparent_press(self, *args):
+        point_table = ([0] + ([255] * 255))
+
+        def diff_image(a, b):
+            diff = ImageChops.difference(a, b)
+            diff = diff.convert('L')
+            diff = diff.point(point_table)
+            diff = ImageChops.invert(diff)
+            new = diff.convert('RGB')
+            new.paste(b, mask=diff)
+            return new
+
+        p = Path(self.image_path)
+        p = p.parents[0]
+        sections = []
+        for root, dirs, files in os.walk(p):
+            print(root, dirs, files)
+            for file in files:
+                if not file.endswith(".png"):
+                    continue
+
+                image = PILImage.open(file)
+                section = self.get_selection_image(image)
+                sections.append(section)
+
+        result = sections.pop()
+        for section in sections:
+            result = diff_image(result, section)
+
+        self.save_image("../extracted", result)
+
     def highlight_unique_press(self, *args):
         sprite = np.array(self.get_selection_image()).tolist()
         unique = self.find_unique_colors()
@@ -160,8 +193,11 @@ class SpriteEditorWidget(Widget):
                      region.sel_y + region.sel_height - 1)
         return selection
 
-    def get_selection_image(self) -> PILImage:
-        image: PILImage = self.image
+    def get_selection_image(self, custom_image=None) -> PILImage:
+        if custom_image is None:
+            image: PILImage = self.image
+        else:
+            image = custom_image
         selection = self.get_selection_region()
         sprite = image.crop(selection)
         return sprite
@@ -194,7 +230,7 @@ class SpriteEditorWidget(Widget):
     def save_image(self, name, image):
         p = Path(self.image_path)
         p = p.parents[0] / f"{name}_{self.date_for_filename()}.png"
-        print (p)
+        print(p)
         image.save(p)
         print("File written to:", p)
 
