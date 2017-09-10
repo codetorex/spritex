@@ -9,6 +9,7 @@ import sys
 from PIL import Image as PILImage, ImageChops
 from PIL import ImageDraw
 from kivy.app import App
+from kivy.base import EventLoop
 from kivy.core.clipboard import Clipboard
 from kivy.core.image import Image as CoreImage
 from kivy.core.window import Window
@@ -22,6 +23,7 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.image import Image
 from kivy.uix.label import Label
 from kivy.uix.popup import Popup
+from kivy.uix.progressbar import ProgressBar
 from kivy.uix.stacklayout import StackLayout
 from kivy.uix.stencilview import StencilView
 from kivy.uix.widget import Widget
@@ -51,12 +53,40 @@ class SpriteEditorInfoLabel(Label):
         self.text = f"[b]{self.name}:[/b] {formatted}"
 
 
+class SpriteEditorProgress(ProgressBar):
+    def __init__(self, **kwargs):
+        super(SpriteEditorProgress, self).__init__(**kwargs)
+        self.last_update = time.time()
+        target_fps = 60.0
+        self.frame_time = 1.0 / target_fps
+        self.opacity = 0
+
+    def update(self, value):
+        self.value = value
+        if 0.0 < value < 100.0:
+            self.opacity = 1.0
+        else:
+            self.opacity = 0.0
+
+        if time.time() - self.last_update > self.frame_time:
+            EventLoop.idle()
+            self.last_update = time.time()
+
+    def step(self, value):
+        self.update(self.value + value)
+
+    def partial_step(self, done, total, final):
+        step = (done / total) * final
+        self.step(step)
+
+
 class SpriteEditorWidget(Widget):
     image: PILImage = ObjectProperty(None)
     core_image: CoreImage = ObjectProperty(None)
     image_path: str = StringProperty(None)
     button_height = 35
     label_height = 20
+    progress: SpriteEditorProgress = ObjectProperty(None)
 
     def show_popup(self, text):
         popup = Popup(title="Sprite Extractor", content=Label(text=text, markup=True), size_hint=(0.6, 0.3))
@@ -107,15 +137,14 @@ class SpriteEditorWidget(Widget):
 
     def __init__(self, **kwargs):
         super(SpriteEditorWidget, self).__init__(**kwargs)
-        # self.images = dict()
-
         self.root = BoxLayout(orientation='horizontal')
-        # self.root = FloatLayout(size=(Window.width, Window.height))
-        # self.grid = GridLayout(cols=8)
-
         self.add_widget(self.root)
 
         self.viewer = SpriteEditorViewer(owner=self, size_hint=(.7, 1))
+
+        self.progress = SpriteEditorProgress(max=100, pos_hint={'x': 0, 'y': 0.98}, size=(100, 10), size_hint=(1, None))
+        self.viewer.add_widget(self.progress)
+
         self.viewer.padding = [4, 4]
         self.root.add_widget(self.viewer)
 
@@ -126,7 +155,6 @@ class SpriteEditorWidget(Widget):
         self.root.add_widget(tool_stack)
         self.tool_stack = tool_stack
 
-        # self._create_tool_button('Load Image', self.load_image_press)
         self._create_toggle_button('Toggle Grid', self.toggle_grid_press)
         self.select_button = self._create_tool_button('Select Region', self.select_press)
 
@@ -178,13 +206,24 @@ class SpriteEditorWidget(Widget):
     def date_for_filename():
         return time.strftime("%Y%m%d%H%M%S", time.localtime())
 
+    @property
+    def is_region_selected(self):
+        return self.viewer.selection.sel_width * self.viewer.selection.sel_height > 0.1
+
     def overlay_update_transparent_extractor(self):
+        if not self.is_region_selected:
+            return
         extracted = self.extract_transparent_black()
         self.viewer.selection.overlay = self.pil_to_core(extracted)
 
     def overlay_update_highlight_unique(self):
+        if not self.is_region_selected:
+            return
         extracted = self.highlight_unique()
-        self.viewer.selection.overlay = self.pil_to_core(extracted)
+        if extracted is None:
+            self.viewer.selection.overlay = None
+        else:
+            self.viewer.selection.overlay = self.pil_to_core(extracted)
 
     def overlay_transparent_press(self, button, enabled, *args):
         if enabled:
@@ -214,6 +253,8 @@ class SpriteEditorWidget(Widget):
             new.paste(b, mask=diff)
             return new
 
+        self.progress.update(0.1)
+
         p = Path(self.image_path)
         p = p.parents[0]
         sections = []
@@ -221,14 +262,17 @@ class SpriteEditorWidget(Widget):
             for file in files:
                 if not file.endswith(".png"):
                     continue
-                    
+
                 image = PILImage.open(root + "/" + file)
                 section = self.get_selection_image(image)
                 sections.append(section.convert('RGB'))
+                self.progress.partial_step(1, len(files), 40)
 
         result = sections.pop()
         for section in sections:
             result = diff_image(result, section)
+            self.progress.partial_step(1, len(sections), 60)
+        self.progress.update(100)
         return result
 
     def extract_transparent(self):
@@ -259,28 +303,49 @@ class SpriteEditorWidget(Widget):
         result_image = PILImage.fromarray(result.astype('uint8'), "RGBA")
         return result_image
 
+    def check_region_selected(self):
+        if not self.is_region_selected:
+            self.show_popup("No region selected")
+            return False
+        return True
+
     def extract_transparent_press(self, *args):
+        if not self.check_region_selected():
+            return
         self.save_image("../extracted", self.extract_transparent())
 
     def highlight_unique(self):
+        self.progress.update(0.1)
         sprite = np.array(self.get_selection_image()).tolist()
+        self.progress.update(10.0)
         unique = self.find_unique_colors()
+        if len(unique) == 0:
+            self.progress.update(100)
+            return None
+        self.progress.update(20.0)
 
         result = []
         for rows in sprite:
             row = []
             for pixel in rows:
                 if pixel in unique:
-                    row.append(pixel)
+                    row.append([pixel[0], pixel[1], pixel[2], 255])
                 else:
-                    row.append([0, 0, 0])
+                    row.append([0, 0, 0, 0])
             result.append(row)
+            self.progress.partial_step(1, len(sprite), 65.0)
 
         result = np.array(result)
-        result_image = PILImage.fromarray(result.astype('uint8'), "RGB")
+        result_image = PILImage.fromarray(result.astype('uint8'), "RGBA")
+        self.progress.update(100)
         return result_image
 
     def highlight_unique_press(self, *args):
+        if not self.check_region_selected():
+            return
+        image = self.highlight_unique()
+        if image == None:
+            self.show_popup("No unique colors found")
         self.save_image("highlight", self.highlight_unique())
 
     def get_selection_region(self):
@@ -301,28 +366,32 @@ class SpriteEditorWidget(Widget):
         return sprite
 
     def find_unique_colors(self) -> List[List[int]]:
+        self.progress.update(0.1)
         selection = self.get_selection_region()
         sprite = self.get_selection_image().convert("RGB")
+        self.progress.update(5)
 
         image: PILImage = self.image.copy().convert("RGB")
         draw = ImageDraw.Draw(image)
         draw.rectangle(selection, fill=0)
         del draw
 
-        rest_pixels = np.array(image)
-        sprite_pixels = np.array(sprite)
+        self.progress.update(10)
 
-        rest_colors = np.unique(rest_pixels.reshape(-1, 3), axis=0).tolist()
-        rest_colors = [item for item in rest_colors if item is not [0, 0, 0]]
-        sprite_colors = np.unique(sprite_pixels.reshape(-1, 3), axis=0).tolist()
-
-        unique_colors = [item for item in sprite_colors if item not in rest_colors]
+        rest_pixels = np.unique(np.asarray(image.getdata()), axis=0).tolist()
+        self.progress.update(30)
+        sprite_pixels = np.unique(np.asarray(sprite.getdata()), axis=0).tolist()
+        self.progress.update(50)
+        unique_colors = [item for item in sprite_pixels if item not in rest_pixels]
+        self.progress.update(90)
 
         if len(unique_colors) == 0:
             print("No unique colors found")
+            self.progress.update(100)
             return []
 
         unique_colors.sort(reverse=True)
+        self.progress.update(100)
         return unique_colors
 
     def save_image(self, name, image):
@@ -334,8 +403,11 @@ class SpriteEditorWidget(Widget):
         print("File written to:", p)
 
     def find_unique_press(self, *args):
+        if not self.check_region_selected():
+            return
         unique_colors = self.find_unique_colors()
         if len(unique_colors) == 0:
+            self.show_popup("No unique colors found")
             return
         unique_colors = np.array([unique_colors])
         print(unique_colors)
@@ -345,6 +417,8 @@ class SpriteEditorWidget(Widget):
         self.save_image("unique", unique_color_image)
 
     def create_sprite_press(self, *args):
+        if not self.check_region_selected():
+            return
         sprite = self.get_selection_image()
         self.save_image("sprite", sprite)
 
