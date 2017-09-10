@@ -2,7 +2,7 @@ import io
 import time
 import os
 from pathlib import Path
-from typing import Generic, Callable, List
+from typing import Generic, Callable, List, Optional
 
 import numpy as np
 import sys
@@ -68,6 +68,27 @@ class SpriteEditorWidget(Widget):
         self.tool_stack.add_widget(result)
         return result
 
+    def _toggle_press(self, button, *args):
+        button.sp_toggle = not button.sp_toggle
+        if button.sp_toggle:
+            button.background_color = [0, 1, 0, 1]
+            button.sp_event(button, True)
+        else:
+            button.background_color = [1, 1, 1, 1]
+            button.sp_event(button, False)
+
+    def _create_toggle_button(self, name, pressed: Callable):
+        result = Button(text=name, size=(200, 50), size_hint=(1, None))
+        result.sp_toggle = False
+        result.sp_event = pressed
+        result.bind(on_press=self._toggle_press)
+        self.tool_stack.add_widget(result)
+        return result
+
+    def _on_overlay_update(self, *args):
+        if self.overlay_updater is not None:
+            self.overlay_updater()
+
     def __init__(self, **kwargs):
         super(SpriteEditorWidget, self).__init__(**kwargs)
         # self.images = dict()
@@ -98,7 +119,11 @@ class SpriteEditorWidget(Widget):
         self._create_tool_button('Create Sprite', self.create_sprite_press)
         self._create_tool_button('Find Unique Colors', self.find_unique_press)
         self._create_tool_button('Highlight Unique Colors', self.highlight_unique_press)
+        self._create_toggle_button('Overlay Unique Colors', self.overlay_unique_press)
+
         self._create_tool_button('Extract Transparent Sprite', self.extract_transparent_press)
+        self._create_toggle_button('Overlay Transparent Sprite', self.overlay_transparent_press)
+        self.overlay_updater: Optional[Callable] = None
 
         info_stack = StackLayout(size=(200, 50), size_hint=(None, 0.3))
         info_stack.orientation = "tb-lr"
@@ -114,6 +139,8 @@ class SpriteEditorWidget(Widget):
         self.sel_height_label = self._create_info_label("sel height")
 
         self.toolbox.add_widget(info_stack)
+
+        self.viewer.selection.bind(on_update=self._on_overlay_update)
 
         Window.bind(on_resize=self.on_window_resize)
         Window.clearcolor = (0.136, 0.191, 0.25, 1)
@@ -136,7 +163,31 @@ class SpriteEditorWidget(Widget):
     def date_for_filename():
         return time.strftime("%Y%m%d%H%M%S", time.localtime())
 
-    def extract_transparent_press(self, *args):
+    def overlay_update_transparent_extractor(self):
+        extracted = self.extract_transparent()
+        self.viewer.selection.overlay = self.pil_to_core(extracted)
+
+    def overlay_update_highlight_unique(self):
+        extracted = self.highlight_unique()
+        self.viewer.selection.overlay = self.pil_to_core(extracted)
+
+    def overlay_transparent_press(self, button, enabled, *args):
+        if enabled:
+            self.overlay_updater = self.overlay_update_transparent_extractor
+            self.overlay_update_transparent_extractor()
+        else:
+            self.overlay_updater = None
+            self.viewer.selection.overlay = None
+
+    def overlay_unique_press(self, button, enabled, *args):
+        if enabled:
+            self.overlay_updater = self.overlay_update_highlight_unique
+            self.overlay_update_highlight_unique()
+        else:
+            self.overlay_updater = None
+            self.viewer.selection.overlay = None
+
+    def extract_transparent(self):
         point_table = ([0] + ([255] * 255))
 
         def diff_image(a, b):
@@ -152,22 +203,23 @@ class SpriteEditorWidget(Widget):
         p = p.parents[0]
         sections = []
         for root, dirs, files in os.walk(p):
-            print(root, dirs, files)
             for file in files:
                 if not file.endswith(".png"):
                     continue
 
                 image = PILImage.open(file)
                 section = self.get_selection_image(image)
-                sections.append(section)
+                sections.append(section.convert('RGB'))
 
         result = sections.pop()
         for section in sections:
             result = diff_image(result, section)
+        return result
 
-        self.save_image("../extracted", result)
+    def extract_transparent_press(self, *args):
+        self.save_image("../extracted", self.extract_transparent())
 
-    def highlight_unique_press(self, *args):
+    def highlight_unique(self):
         sprite = np.array(self.get_selection_image()).tolist()
         unique = self.find_unique_colors()
 
@@ -183,7 +235,10 @@ class SpriteEditorWidget(Widget):
 
         result = np.array(result)
         result_image = PILImage.fromarray(result.astype('uint8'), "RGB")
-        self.save_image("highlight", result_image)
+        return result_image
+
+    def highlight_unique_press(self, *args):
+        self.save_image("highlight", self.highlight_unique())
 
     def get_selection_region(self):
         region = self.viewer.selection
@@ -222,7 +277,7 @@ class SpriteEditorWidget(Widget):
 
         if len(unique_colors) == 0:
             print("No unique colors found")
-            return
+            return []
 
         unique_colors.sort(reverse=True)
         return unique_colors
@@ -236,6 +291,8 @@ class SpriteEditorWidget(Widget):
 
     def find_unique_press(self, *args):
         unique_colors = self.find_unique_colors()
+        if len(unique_colors) == 0:
+            return
         unique_colors = np.array([unique_colors])
         print(unique_colors)
         print(unique_colors.shape)
@@ -256,16 +313,18 @@ class SpriteEditorWidget(Widget):
     def load_image(self, path):
         self.image_path = path
 
-    def on_image(self, sender, image: PILImage):
-        print("Image set")
-
-        image = self.image.convert("RGB")
+    def pil_to_core(self, pil):
+        image = pil.convert("RGB")
         image_file = io.BytesIO()
 
         image.save(image_file, "png")
         image_file.seek(0)
 
-        self.core_image = CoreImage(image_file, ext="png")
+        return CoreImage(image_file, ext="png")
+
+    def on_image(self, sender, image: PILImage):
+        print("Image set")
+        self.core_image = self.pil_to_core(image)
         self.viewer.set_texture(self.core_image.texture)
 
     def select_press(self, *args):
@@ -340,7 +399,7 @@ class RegionTool(Tool):
         editor.tool = PanZoomTool()
 
 
-class RegionSelection(Widget):
+class RegionSelection(FloatLayout):
     sel_x = NumericProperty(0.0)
     sel_y = NumericProperty(0.0)
     sel_width = NumericProperty(0.0)
@@ -348,13 +407,34 @@ class RegionSelection(Widget):
     visible = BooleanProperty(False)
     rect = ObjectProperty(None)
 
+    @property
+    def overlay(self):
+        return self._overlay
+
+    @overlay.setter
+    def overlay(self, overlay):
+        self._overlay = overlay
+        if self._overlay is None:
+            self.overlay_image.texture = None
+            self.overlay_image.opacity = 0.0
+        else:
+            self.overlay_image.texture = self.overlay.texture
+            self.overlay_image.opacity = 1.0
+
     def __init__(self, viewer: 'SpriteEditorViewer' = None, **kwargs):
         super(RegionSelection, self).__init__(**kwargs)
         self.viewer = viewer
         self.bind(sel_x=self.update, sel_y=self.update, sel_width=self.update, sel_height=self.update)
+        self.bind(sel_x=self.update_overlay, sel_y=self.update_overlay, sel_width=self.update_overlay,
+                  sel_height=self.update_overlay)
         self.viewer.image.bind(size=self.update, pos=self.update)
         self.viewer.bind(xscale=self.update, yscale=self.update)
         self.bind(visible=self.redraw)
+        self.overlay_image = SpriteEditorImage(allow_stretch=True, nocache=True, size_hint=(None, None))
+        self.add_widget(self.overlay_image)
+        self.overlay_image.opacity = 0.0
+        self._overlay: Optional[CoreImage] = None
+        self.register_event_type('on_update')
 
         self._keyboard = Window.request_keyboard(
             self._keyboard_closed, self, 'text')
@@ -418,6 +498,15 @@ class RegionSelection(Widget):
 
         return False
 
+    def on_update(self, *args):
+        pass
+
+    def update_overlay(self, *args):
+        if self.sel_width > 0 and self.sel_height > 0:
+            self.dispatch("on_update")
+        else:
+            self.overlay = None
+
     def update(self, *args):
         if self.rect is None:
             self.redraw()
@@ -426,15 +515,21 @@ class RegionSelection(Widget):
         self.rect.pos = self.viewer.image_pos_to_window((self.sel_x - 1, self.sel_y + self.sel_height - 1))
         self.rect.size = self.viewer.image_size_to_window(self.sel_width, self.sel_height)
 
+        self.overlay_image.pos = self.rect.pos
+        self.overlay_image.size = self.rect.size
+
         self.viewer.owner.sel_x_label.set_value(self.sel_x)
         self.viewer.owner.sel_y_label.set_value(self.sel_y)
         self.viewer.owner.sel_width_label.set_value(self.sel_width)
         self.viewer.owner.sel_height_label.set_value(self.sel_height)
 
     def redraw(self, *args):
-        self.canvas.clear()
+        # self.canvas.clear()
         if not self.visible:
+            self.opacity = 0.0
             return
+        else:
+            self.opacity = 1.0
 
         with self.canvas:
             Color(0.5, 1, 0.5, 0.3)
@@ -617,5 +712,6 @@ class SpriteEditorImage(Image):
         self.bind(texture=self.update_texture_filters)
 
     def update_texture_filters(self, *args):
+        if self.texture == None: return
         self.texture.min_filter = 'nearest'
         self.texture.mag_filter = 'nearest'
