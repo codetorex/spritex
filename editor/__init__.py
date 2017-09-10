@@ -16,6 +16,7 @@ from kivy.core.window import Window
 from kivy.graphics.context_instructions import Color
 from kivy.graphics.instructions import InstructionGroup
 from kivy.graphics.vertex_instructions import Line, Rectangle
+from kivy.metrics import dp
 from kivy.properties import ObjectProperty, NumericProperty, BooleanProperty, Clock, partial, StringProperty
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
@@ -84,8 +85,8 @@ class SpriteEditorWidget(Widget):
     image: PILImage = ObjectProperty(None)
     core_image: CoreImage = ObjectProperty(None)
     image_path: str = StringProperty(None)
-    button_height = 35
-    label_height = 20
+    button_height = dp(35)
+    label_height = dp(20)
     progress: SpriteEditorProgress = ObjectProperty(None)
 
     def show_popup(self, text):
@@ -93,7 +94,7 @@ class SpriteEditorWidget(Widget):
         popup.open()
 
     def _create_info_label(self, name, val_format="%i"):
-        label = SpriteEditorInfoLabel(halign="left", text_size=(200, 32), size=(200, self.label_height),
+        label = SpriteEditorInfoLabel(halign="left", text_size=(200, dp(32)), size=(200, self.label_height),
                                       size_hint=(1, None),
                                       padding=[8, 8])
         label.name = name
@@ -108,7 +109,7 @@ class SpriteEditorWidget(Widget):
         return result
 
     def _create_tool_label(self, name):
-        result = Label(halign="left", text_size=(200, 32), size=(200, self.label_height), markup=True,
+        result = Label(halign="left", text_size=(200, dp(32)), size=(200, self.label_height), markup=True,
                        size_hint=(1, None), padding=[8, 8])
         result.text = "[b]" + name + "[/b]"
         self.tool_stack.add_widget(result)
@@ -142,13 +143,13 @@ class SpriteEditorWidget(Widget):
 
         self.viewer = SpriteEditorViewer(owner=self, size_hint=(.7, 1))
 
-        self.progress = SpriteEditorProgress(max=100, pos_hint={'x': 0, 'y': 0.98}, size=(100, 10), size_hint=(1, None))
+        self.progress = SpriteEditorProgress(max=100, pos_hint={'x': 0, 'y': 0.98}, size=(100, dp(10)), size_hint=(1, None))
         self.viewer.add_widget(self.progress)
 
         self.viewer.padding = [4, 4]
         self.root.add_widget(self.viewer)
 
-        tool_stack = StackLayout(size=(200, 50), size_hint=(None, 1))
+        tool_stack = StackLayout(size=(dp(200), 50), size_hint=(None, 1))
         tool_stack.orientation = "tb-lr"
         tool_stack.padding = [4, 4]
         tool_stack.spacing = 4
