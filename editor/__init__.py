@@ -21,6 +21,7 @@ from kivy.uix.button import Button
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.image import Image
 from kivy.uix.label import Label
+from kivy.uix.popup import Popup
 from kivy.uix.stacklayout import StackLayout
 from kivy.uix.stencilview import StencilView
 from kivy.uix.widget import Widget
@@ -46,25 +47,40 @@ class SpriteEditorInfoLabel(Label):
 
     def set_value(self, value):
         formatted = self.val_format % value
-        self.text = f"{self.name}: {formatted}"
+        self.markup = True
+        self.text = f"[b]{self.name}:[/b] {formatted}"
 
 
 class SpriteEditorWidget(Widget):
     image: PILImage = ObjectProperty(None)
     core_image: CoreImage = ObjectProperty(None)
     image_path: str = StringProperty(None)
+    button_height = 35
+    label_height = 20
+
+    def show_popup(self, text):
+        popup = Popup(title="Sprite Extractor", content=Label(text=text, markup=True), size_hint=(0.6, 0.3))
+        popup.open()
 
     def _create_info_label(self, name, val_format="%i"):
-        label = SpriteEditorInfoLabel(halign="left", text_size=(200, 32), size=(200, 20), size_hint=(1, None),
+        label = SpriteEditorInfoLabel(halign="left", text_size=(200, 32), size=(200, self.label_height),
+                                      size_hint=(1, None),
                                       padding=[8, 8])
         label.name = name
         label.val_format = val_format
-        self.info_stack.add_widget(label)
+        self.tool_stack.add_widget(label)
         return label
 
     def _create_tool_button(self, name, pressed: Callable):
-        result = Button(text=name, size=(200, 50), size_hint=(1, None))
+        result = Button(text=name, size=(200, self.button_height), size_hint=(1, None))
         result.bind(on_press=pressed)
+        self.tool_stack.add_widget(result)
+        return result
+
+    def _create_tool_label(self, name):
+        result = Label(halign="left", text_size=(200, 32), size=(200, self.label_height), markup=True,
+                       size_hint=(1, None), padding=[8, 8])
+        result.text = "[b]" + name + "[/b]"
         self.tool_stack.add_widget(result)
         return result
 
@@ -78,7 +94,7 @@ class SpriteEditorWidget(Widget):
             button.sp_event(button, False)
 
     def _create_toggle_button(self, name, pressed: Callable):
-        result = Button(text=name, size=(200, 50), size_hint=(1, None))
+        result = Button(text=name, size=(200, self.button_height), size_hint=(1, None))
         result.sp_toggle = False
         result.sp_event = pressed
         result.bind(on_press=self._toggle_press)
@@ -103,33 +119,32 @@ class SpriteEditorWidget(Widget):
         self.viewer.padding = [4, 4]
         self.root.add_widget(self.viewer)
 
-        self.toolbox = BoxLayout(orientation='vertical', size=(200, 50), size_hint=(None, 1))
-        self.root.add_widget(self.toolbox)
-
-        tool_stack = StackLayout(size=(200, 50), size_hint=(None, 0.7))
+        tool_stack = StackLayout(size=(200, 50), size_hint=(None, 1))
         tool_stack.orientation = "tb-lr"
         tool_stack.padding = [4, 4]
-        self.toolbox.add_widget(tool_stack)
+        tool_stack.spacing = 4
+        self.root.add_widget(tool_stack)
         self.tool_stack = tool_stack
 
         # self._create_tool_button('Load Image', self.load_image_press)
-        self._create_tool_button('Toggle Grid', self.toggle_grid_press)
+        self._create_toggle_button('Toggle Grid', self.toggle_grid_press)
         self.select_button = self._create_tool_button('Select Region', self.select_press)
-        self._create_tool_button('Copy Region to Clipboard', self.copy_region_press)
-        self._create_tool_button('Create Sprite', self.create_sprite_press)
-        self._create_tool_button('Find Unique Colors', self.find_unique_press)
-        self._create_tool_button('Highlight Unique Colors', self.highlight_unique_press)
-        self._create_toggle_button('Overlay Unique Colors', self.overlay_unique_press)
 
-        self._create_tool_button('Extract Transparent Sprite', self.extract_transparent_press)
-        self._create_toggle_button('Overlay Transparent Sprite', self.overlay_transparent_press)
+        self._create_tool_button('Copy Region to Clipboard', self.copy_region_press)
+
+        self._create_tool_label("Extract:")
+        self._create_tool_button('Sprite', self.create_sprite_press)
+        self._create_tool_button('Unique Colors', self.find_unique_press)
+        self._create_tool_button('Unique Sprite', self.highlight_unique_press)
+        self._create_tool_button('Transparent Sprite', self.extract_transparent_press)
+
+        self._create_tool_label("Overlay:")
+        self._create_toggle_button('Unique Colors', self.overlay_unique_press)
+        self._create_toggle_button('Transparent Sprite', self.overlay_transparent_press)
+
         self.overlay_updater: Optional[Callable] = None
 
-        info_stack = StackLayout(size=(200, 50), size_hint=(None, 0.3))
-        info_stack.orientation = "tb-lr"
-        info_stack.padding = [4, 4]
-        self.info_stack = info_stack
-
+        self._create_tool_label("Region Info:")
         self.x_label = self._create_info_label("x")
         self.y_label = self._create_info_label("y")
 
@@ -137,8 +152,6 @@ class SpriteEditorWidget(Widget):
         self.sel_y_label = self._create_info_label("sel y")
         self.sel_width_label = self._create_info_label("sel width")
         self.sel_height_label = self._create_info_label("sel height")
-
-        self.toolbox.add_widget(info_stack)
 
         self.viewer.selection.bind(on_update=self._on_overlay_update)
 
@@ -151,20 +164,22 @@ class SpriteEditorWidget(Widget):
             self.load_image(sys.argv[1])
 
     def _on_drop_file(self, window, file_path):
-        print(file_path)
-        self.load_image(file_path)
+        p = file_path.decode("utf-8")
+        print(p)
+        self.load_image(p)
 
     def copy_region_press(self, *args):
         region = self.viewer.selection
-        Clipboard.copy(f"\"REGION\": ({region.sel_y}, {region.sel_x}," +
-                       f" {region.sel_y + region.sel_height}, {region.sel_x + region.sel_width})")
+        text = f"\"REGION\": ({region.sel_y}, {region.sel_x}, {region.sel_y + region.sel_height}, {region.sel_x + region.sel_width})"
+        Clipboard.copy(text)
+        self.show_popup(f"Copied to clipboard:\n[b]{text}[/b]")
 
     @staticmethod
     def date_for_filename():
         return time.strftime("%Y%m%d%H%M%S", time.localtime())
 
     def overlay_update_transparent_extractor(self):
-        extracted = self.extract_transparent()
+        extracted = self.extract_transparent_black()
         self.viewer.selection.overlay = self.pil_to_core(extracted)
 
     def overlay_update_highlight_unique(self):
@@ -187,7 +202,7 @@ class SpriteEditorWidget(Widget):
             self.overlay_updater = None
             self.viewer.selection.overlay = None
 
-    def extract_transparent(self):
+    def extract_transparent_black(self):
         point_table = ([0] + ([255] * 255))
 
         def diff_image(a, b):
@@ -206,8 +221,8 @@ class SpriteEditorWidget(Widget):
             for file in files:
                 if not file.endswith(".png"):
                     continue
-
-                image = PILImage.open(file)
+                    
+                image = PILImage.open(root + "/" + file)
                 section = self.get_selection_image(image)
                 sections.append(section.convert('RGB'))
 
@@ -215,6 +230,34 @@ class SpriteEditorWidget(Widget):
         for section in sections:
             result = diff_image(result, section)
         return result
+
+    def extract_transparent(self):
+        point_table = ([0] + ([255] * 255))
+        p = Path(self.image_path)
+        p = p.parents[0]
+        sections = []
+        for root, dirs, files in os.walk(p):
+            for file in files:
+
+                if not file.endswith(".png"):
+                    continue
+
+                image = PILImage.open(file)
+                section = self.get_selection_image(image)
+                sections.append(np.array(section.convert('RGBA')))
+
+        result = np.array(sections.pop()).tolist()
+        for section in sections:
+            for y, row in enumerate(result):
+                for x, pixel in enumerate(row):
+                    if np.all(pixel == section[y][x]):
+                        continue
+                    else:
+                        pixel[3] = 0
+
+        result = np.array(result)
+        result_image = PILImage.fromarray(result.astype('uint8'), "RGBA")
+        return result_image
 
     def extract_transparent_press(self, *args):
         self.save_image("../extracted", self.extract_transparent())
@@ -259,9 +302,9 @@ class SpriteEditorWidget(Widget):
 
     def find_unique_colors(self) -> List[List[int]]:
         selection = self.get_selection_region()
-        sprite = self.get_selection_image()
+        sprite = self.get_selection_image().convert("RGB")
 
-        image: PILImage = self.image.copy()
+        image: PILImage = self.image.copy().convert("RGB")
         draw = ImageDraw.Draw(image)
         draw.rectangle(selection, fill=0)
         del draw
@@ -287,6 +330,7 @@ class SpriteEditorWidget(Widget):
         p = p.parents[0] / f"{name}_{self.date_for_filename()}.png"
         print(p)
         image.save(p)
+        self.show_popup(f"File written to: [b]{p}[/b]")
         print("File written to:", p)
 
     def find_unique_press(self, *args):
@@ -304,8 +348,8 @@ class SpriteEditorWidget(Widget):
         sprite = self.get_selection_image()
         self.save_image("sprite", sprite)
 
-    def toggle_grid_press(self, *args):
-        self.viewer.toggle_grid()
+    def toggle_grid_press(self, button, enabled, *args):
+        self.viewer.toggle_grid(enabled)
 
     def on_image_path(self, *args):
         self.image = PILImage.open(self.image_path)  # CoreImage(path, keep_data=True)
@@ -515,6 +559,8 @@ class RegionSelection(FloatLayout):
         self.rect.pos = self.viewer.image_pos_to_window((self.sel_x - 1, self.sel_y + self.sel_height - 1))
         self.rect.size = self.viewer.image_size_to_window(self.sel_width, self.sel_height)
 
+        self.rect2.rectangle = (self.rect.pos[0], self.rect.pos[1], self.rect.size[0], self.rect.size[1])
+
         self.overlay_image.pos = self.rect.pos
         self.overlay_image.size = self.rect.size
 
@@ -534,6 +580,8 @@ class RegionSelection(FloatLayout):
         with self.canvas:
             Color(0.5, 1, 0.5, 0.3)
             self.rect = Rectangle()
+            Color(1, 1, 0, 0.7)
+            self.rect2 = Line(rectangle=(0, 0, 0, 0), width=1.2)
         self.update()
 
 
@@ -695,13 +743,18 @@ class SpriteEditorGrid(Widget):
         h_stride = self.width / width
         v_stride = self.height / height
 
+        if h_stride < 8 or v_stride < 8:
+            return
+
         grid = InstructionGroup()
 
         grid.add(Color(1, 1, 1))
         for y in range(0, height):
-            grid.add(Line(points=[self.x + 0, self.y + y * v_stride, self.x + self.width, self.y + y * v_stride]))
+            grid.add(Line(points=[int(self.x + 0), int(self.y + y * v_stride), int(self.x + self.width),
+                                  int(self.y + y * v_stride)]))
         for x in range(0, width):
-            grid.add(Line(points=[self.x + x * h_stride, self.y + 0, self.x + x * h_stride, self.y + self.height]))
+            grid.add(Line(points=[int(self.x + x * h_stride), int(self.y + 0), int(self.x + x * h_stride),
+                                  int(self.y + self.height)]))
 
         self.canvas.add(grid)
 
