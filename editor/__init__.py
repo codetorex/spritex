@@ -199,7 +199,7 @@ class SpriteEditorWidget(Widget):
 
     def copy_region_press(self, *args):
         region = self.viewer.selection
-        text = f"\"REGION\": ({region.sel_y}, {region.sel_x}, {region.sel_y + region.sel_height}, {region.sel_x + region.sel_width})"
+        text = f"\"REGION\": ({int(region.sel_y)}, {int(region.sel_x)}, {int(region.sel_y + region.sel_height)}, {int(region.sel_x + region.sel_width)})"
         Clipboard.copy(text)
         self.show_popup(f"Copied to clipboard:\n[b]{text}[/b]")
 
@@ -631,7 +631,7 @@ class RegionSelection(FloatLayout):
             self.redraw()
             return
 
-        self.rect.pos = self.viewer.image_pos_to_window((self.sel_x - 1, self.sel_y + self.sel_height - 1))
+        self.rect.pos = self.viewer.image_pos_to_window((self.sel_x, self.sel_y + self.sel_height))
         self.rect.size = self.viewer.image_size_to_window(self.sel_width, self.sel_height)
 
         self.rect2.rectangle = (self.rect.pos[0], self.rect.pos[1], self.rect.size[0], self.rect.size[1])
@@ -726,8 +726,8 @@ class SpriteEditorViewer(FloatLayout, StencilView):
         if local_pos[1] >= self.image.texture.size[1]:
             local_pos[1] = self.image.texture.size[1] - 1
 
-        local_pos[0] = int(local_pos[0]) + 1
-        local_pos[1] = int(local_pos[1]) + 1
+        local_pos[0] = int(local_pos[0])
+        local_pos[1] = int(local_pos[1])
         return local_pos
 
     def get_mouse_image_pos(self):
