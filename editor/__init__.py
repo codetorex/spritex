@@ -679,7 +679,7 @@ class SpriteEditorViewer(FloatLayout, StencilView):
         self.add_widget(self.image)
         self.owner: 'SpriteEditorWidget' = owner
 
-        self.grid = SpriteEditorGrid(owner=self.image, size_hint=(None, None))
+        self.grid = SpriteEditorGrid(owner=self.image, viewer=self, size_hint=(None, None))
         self.add_widget(self.grid)
         self._tool: Generic[Tool] = None
         self.tool = PanZoomTool()
@@ -797,9 +797,10 @@ class SpriteEditorViewer(FloatLayout, StencilView):
 class SpriteEditorGrid(Widget):
     visible = BooleanProperty(False)
 
-    def __init__(self, owner: 'SpriteEditorImage' = None, **kwargs):
+    def __init__(self, owner: 'SpriteEditorImage' = None, viewer: SpriteEditorViewer = None, **kwargs):
         super(SpriteEditorGrid, self).__init__(**kwargs)
         self.owner = owner
+        self.viewer = viewer
         self.owner.bind(size=self.redraw, pos=self.redraw)
         self.bind(visible=self.redraw)
 
@@ -828,11 +829,27 @@ class SpriteEditorGrid(Widget):
 
         grid = InstructionGroup()
 
+        startx = int(-self.owner.pos[0] / h_stride)
+        if startx < 0:
+            startx = 0
+
+        starty = int(-self.owner.pos[1] / v_stride)
+        if starty < 0:
+            starty = 0
+
+        endx = int(self.viewer.size[0] / h_stride + startx + 2)
+        endy = int(self.viewer.size[1] / v_stride + starty + 2)
+        if endy >= height + 1:
+            endy = height + 1
+
+        if endx >= width + 1:
+            endx = width + 1
+
         grid.add(Color(1, 1, 1))
-        for y in range(0, height):
+        for y in range(starty, endy):
             grid.add(Line(points=[int(self.x + 0), int(self.y + y * v_stride), int(self.x + self.width),
                                   int(self.y + y * v_stride)]))
-        for x in range(0, width):
+        for x in range(startx, endx):
             grid.add(Line(points=[int(self.x + x * h_stride), int(self.y + 0), int(self.x + x * h_stride),
                                   int(self.y + self.height)]))
 
