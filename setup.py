@@ -3,6 +3,7 @@ from setuptools import setup
 
 try:
     import pypandoc
+
     long_description = pypandoc.convert('README.md', 'rst')
 except(IOError, ImportError):
     long_description = ""
@@ -12,9 +13,10 @@ packages = [
 ]
 
 requires = [
-    'numpy',
-    'Kivy',
-    'pillow'
+    'numpy>=1.12.1'
+    'Kivy>=1.10.0'
+    'pillow>=2.1.0'
+    'cython'
 ]
 
 setup(
