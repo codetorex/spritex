@@ -6,6 +6,5 @@ import sys
 dir_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, dir_path + "/..")
 
-from editor import SpriteEditorApp
-
-SpriteEditorApp().run()
+from editor import execute
+execute()

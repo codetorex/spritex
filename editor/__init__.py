@@ -30,6 +30,10 @@ from kivy.uix.stencilview import StencilView
 from kivy.uix.widget import Widget
 
 
+def execute():
+    SpriteEditorApp().run()
+
+
 class SpriteEditorApp(App):
     def __init__(self):
         super(SpriteEditorApp, self).__init__()
@@ -143,7 +147,8 @@ class SpriteEditorWidget(Widget):
 
         self.viewer = SpriteEditorViewer(owner=self, size_hint=(.7, 1))
 
-        self.progress = SpriteEditorProgress(max=100, pos_hint={'x': 0, 'y': 0.98}, size=(100, dp(10)), size_hint=(1, None))
+        self.progress = SpriteEditorProgress(max=100, pos_hint={'x': 0, 'y': 0.98}, size=(100, dp(10)),
+                                             size_hint=(1, None))
         self.viewer.add_widget(self.progress)
 
         self.viewer.padding = [4, 4]
@@ -352,9 +357,9 @@ class SpriteEditorWidget(Widget):
     def get_selection_region(self):
         region = self.viewer.selection
 
-        selection = (region.sel_x - 1, region.sel_y - 1,
-                     region.sel_x + region.sel_width - 1,
-                     region.sel_y + region.sel_height - 1)
+        selection = (region.sel_x, region.sel_y,
+                     region.sel_x + region.sel_width,
+                     region.sel_y + region.sel_height)
         return selection
 
     def get_selection_image(self, custom_image=None) -> PILImage:
