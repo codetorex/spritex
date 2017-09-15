@@ -35,6 +35,7 @@ setup(
     license='MIT License',
     url='https://github.com/codetorex/spritex',
     zip_safe=False,
+    keywords=['spritex', 'sprite', 'extractor', 'unique color'],
     classifiers=[
         'Development Status :: 4 - Beta',
         'Topic :: Multimedia :: Graphics :: Editors :: Raster-Based',
