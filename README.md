@@ -3,7 +3,16 @@ A simple tool for extracting sprites from full frames. Useful for AI projects. M
 
 
 ## Installation
-To install, run ```install.sh``` which will create a symbolic link from "bin/spritex" to "/usr/local/bin" folder.
+
+### PyPI
+
+```pip install spritex```
+
+After running this command ```spritex``` command should be accessible from terminal.
+
+### For development and git cloning
+
+There is ```install.sh``` which will create a symbolic link from "bin/spritex" to "/usr/local/bin" folder. Which enables ```spritex``` command to be executed from terminal.
 
 ### Dependencies
 * numpy==1.12.1
@@ -22,7 +31,12 @@ You can install dependencies via pacman.
 ## Usage
 You can open image files through ```spritex path.png```. If you use SDL2 backend you can drag and drop image files on to application window.
 
-After a region selected roughly, it is possible to fine tune by arrow keys.
+### General functionality
+* Toggle grid: Shows pixel grid when zoomed in. 
+    * Zoom should be at least 8 screen pixels = 1 image pixel.
+* Select region: Allows you to select a rectangular region in image via mouse drag and drop. 
+    * After a region selected roughly, it is possible to fine tune by arrow keys. 
+* Copy Region to Clipboard: Copies the selected region coordinates to clipboard in **(y1,x1,y2,x2)** format.
 
 ### Keyboard shortcuts
 
@@ -47,6 +61,6 @@ Dynamically updates the selection window with selected operation. Useful for pre
 
 ### Screenshots
 
-![Screenshot](/../screenshots/screenshot00.png?raw=true "Screenshot")
+![Screenshot](https://github.com/codetorex/spritex/raw/screenshots/screenshot00.png?raw=true "Screenshot")
 
-![Screenshot](/../screenshots/screenshot01.png?raw=true "Screenshot")
+![Screenshot](https://github.com/codetorex/spritex/raw/screenshots/screenshot01.png?raw=true "Screenshot")

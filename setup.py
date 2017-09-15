@@ -21,7 +21,7 @@ requires = [
 
 setup(
     name='spritex',
-    version="0.1.1",
+    version="0.1.3",
     description='A simple tool for extracting sprites from full frames. Useful for AI projects. ',
     long_description=long_description,
     author="codetorex",
